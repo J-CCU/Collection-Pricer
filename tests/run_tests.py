@@ -3,7 +3,7 @@
 Run from the CardPricer folder:   py tests/run_tests.py [section ...]
 Sections: layouts, filegame, magic, pokemon, yugioh, onepiece, riftbound, sealed, mixed
 (default: all). Needs the Scryfall index built by
-the app ("Build / Verify"); TCGCSV-backed sections skip games not synced.
+the app ("1. Load Card Data"); TCGCSV-backed sections skip games not synced.
 """
 
 import csv

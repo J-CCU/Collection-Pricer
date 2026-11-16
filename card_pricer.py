@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Collection Pricer - Magic, Pokemon, Yu-Gi-Oh!, One Piece, Riftbound.
 
-One-file build of the cardpricer package (made by make_single_file.py; edit
-the package, not this file). Run:
+One-file build of the cardpricer package (made by make_single_file.py, which is
+not in this repo; edit the package, not this file). Run:
     Windows:  py card_pricer.py
     Mac:      python3 card_pricer.py
 Needs: pip install requests openpyxl
@@ -424,7 +424,7 @@ def price_offer(nm_price, tiers, condition=None, special_ratios=(), condition_pc
 
     1. NM price x condition % (NM 100, MP 70, ...) = condition value.
     2. The condition value's range sets the Buy %.
-    E.g. $100 NM in MP at 70% -> $70 -> the $50-80 range's 50% -> $35.
+    E.g. $100 NM in MP at 70% -> $70 -> the $25-100 range's 55% -> $38.50.
     condition_pcts is the flat "All cards" row; without it, the condition
     columns of the NM price's range are used. Returns (condition %,
     condition value, buy %, offer); None parts when no range covers a price.
