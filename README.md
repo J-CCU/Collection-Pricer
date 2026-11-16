@@ -97,7 +97,10 @@ after changing the package, use `run_pricer.py` or regenerate it elsewhere.
 
 1. **1. Load Card Data** loads Scryfall and TCGplayer data. The first run
    downloads it: about 400 MB from Scryfall and about 15 minutes of TCGCSV
-   requests for all games. Later loads use the local cache.
+   requests for all games. Later loads reuse the local TCGplayer data, but
+   every load asks Scryfall whether its card list has changed and downloads
+   the full ~400 MB again when it has. Scryfall publishes a new list about
+   once a day, so the first load each day usually includes this download.
 2. **2. Select List** prices a list. Two files are written next to it:
    `<name>_PRICED_<YYYYMMDD_HHMMSS>.xlsx` (filter on every column, frozen
    header, rows colored by status, prices stored as numbers) and a `.csv`

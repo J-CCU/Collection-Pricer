@@ -16,6 +16,7 @@ Needs: pip install requests openpyxl
 
 import re
 import unicodedata
+from decimal import ROUND_HALF_UP, Decimal
 
 # Known set aliases remain user-facing conveniences. Card treatments/variants are
 # intentionally NOT maintained as a hard-coded list. The matcher learns available
@@ -57,6 +58,13 @@ def money(v):
 
 def money_text(v):
     return "" if v is None else f"${v:,.2f}"
+
+def round_cents(v):
+    """Round to whole cents, half up (0.865 -> 0.87). Offers and Extended
+    Value use this so each row and the TOTAL row add up to the cent."""
+    if v is None:
+        return None
+    return float(Decimal(str(v)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 def unique(seq):
     out = []
@@ -3400,7 +3408,8 @@ def make_row(game, raw, qty, parsed, ident, review, condition, buy_tiers, condit
                 note += f" ({labels} value used instead of {plain_pct:g}%)"
             if buy_pct is not None:
                 note += f"; {buy_pct:g}% buy range"
-    extended = price_used * qty if price_used is not None else None
+    price_used = round_cents(price_used)
+    extended = round_cents(price_used * qty) if price_used is not None else None
     return {
         "Status": "",
         "Game": GAMES[game]["label"] if game in GAMES else "",
@@ -3857,9 +3866,9 @@ class Engine:
             progress(i, len(items))
             if row["Price Used"]:
                 totals["with_price"] += 1
-                numeric = money(row["Price Used"])
+                numeric = money(row["Extended Value"])
                 if numeric is not None:
-                    totals["value"] += numeric * qty
+                    totals["value"] = round_cents(totals["value"] + numeric)
 
         for row in output:
             row["Status"] = STATUS_LABELS[_bucket(row)]

@@ -2,6 +2,7 @@
 
 import re
 import unicodedata
+from decimal import ROUND_HALF_UP, Decimal
 
 # Known set aliases remain user-facing conveniences. Card treatments/variants are
 # intentionally NOT maintained as a hard-coded list. The matcher learns available
@@ -43,6 +44,13 @@ def money(v):
 
 def money_text(v):
     return "" if v is None else f"${v:,.2f}"
+
+def round_cents(v):
+    """Round to whole cents, half up (0.865 -> 0.87). Offers and Extended
+    Value use this so each row and the TOTAL row add up to the cent."""
+    if v is None:
+        return None
+    return float(Decimal(str(v)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 def unique(seq):
     out = []

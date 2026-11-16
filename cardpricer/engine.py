@@ -22,7 +22,7 @@ from .games.tcg import FINISH_PHRASES, GAME_TITLE_WORDS, TCG_SEALED_RE, TCGMatch
 from .listread import read_list
 from .pricing import DEFAULT_SEALED_TIERS, SPECIAL_RULE_LABELS, normalize_special_rules, price_offer
 from .sources.tcgcsv import GAMES, choose_price
-from .text import _is_number_only, compact, money, money_text, norm, unique
+from .text import _is_number_only, compact, money, money_text, norm, round_cents, unique
 
 OUTPUT_COLUMNS = [
     "Status", "Game", "Input", "Quantity", "Matched Name", "Set", "Set Code", "Collector Number",
@@ -97,7 +97,8 @@ def make_row(game, raw, qty, parsed, ident, review, condition, buy_tiers, condit
                 note += f" ({labels} value used instead of {plain_pct:g}%)"
             if buy_pct is not None:
                 note += f"; {buy_pct:g}% buy range"
-    extended = price_used * qty if price_used is not None else None
+    price_used = round_cents(price_used)
+    extended = round_cents(price_used * qty) if price_used is not None else None
     return {
         "Status": "",
         "Game": GAMES[game]["label"] if game in GAMES else "",
@@ -554,9 +555,9 @@ class Engine:
             progress(i, len(items))
             if row["Price Used"]:
                 totals["with_price"] += 1
-                numeric = money(row["Price Used"])
+                numeric = money(row["Extended Value"])
                 if numeric is not None:
-                    totals["value"] += numeric * qty
+                    totals["value"] = round_cents(totals["value"] + numeric)
 
         for row in output:
             row["Status"] = STATUS_LABELS[_bucket(row)]
