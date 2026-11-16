@@ -7,9 +7,13 @@ tables, and writes a color-coded Excel sheet and a CSV.
 
 ## Quick start
 
-1. Open the prebuilt app (`CardPricer.exe` on Windows, `CardPricer.app` from
-   `CardPricer-mac.zip` on an Apple Silicon Mac) or run `run_pricer.py` from
-   source (see [Running](#running)).
+Prebuilt apps aren't included right now; build one from source (see
+[Building the .exe and .app](#building-the-exe-and-app)) or run
+`run_pricer.py` with Python.
+
+1. Run `run_pricer.py` from source (see [Running](#running)), or open an
+   app you built yourself (see
+   [Building the .exe and .app](#building-the-exe-and-app)).
 2. Click **1. Load Card Data**. The first time this downloads about 400 MB
    from Scryfall and takes about 15 minutes for TCGplayer data.
 3. Click **2. Select List** and pick a `.csv`, `.tsv`, `.txt` or `.xlsx` list.
@@ -51,12 +55,11 @@ assumption** setting (default `LP/MP`, the average of LP and MP).
 
 ## Running
 
-### Prebuilt app
+### Built app
 
-- Windows: `CardPricer.exe`
-- Mac: unzip `CardPricer-mac.zip` to get `CardPricer.app`. The included
-  build is for Apple Silicon; on an Intel Mac, build it yourself (see
-  [Building the .exe and .app](#building-the-exe-and-app)) or run from source.
+Build `CardPricer.exe` (Windows) or `CardPricer.app` (Mac) yourself; see
+[Building the .exe and .app](#building-the-exe-and-app). A Mac build runs
+on the chip it was built on (Apple Silicon or Intel).
 
 The apps are not signed. On Windows, at "Windows protected your PC" click
 **More info**, then **Run anyway**. On a Mac, right-click the app, choose
@@ -274,7 +277,6 @@ run's Artifacts:
 | `samples/` | Sample lists, their priced output, and `grade_samples.py` |
 | `CardPricer.spec`, `build_mac.sh`, `build_windows.bat` | Build scripts |
 | `.github/workflows/build.yml` | GitHub Actions build |
-| `CardPricer.exe`, `CardPricer-mac.zip` | Prebuilt current app |
 | `card_pricer.py` | **Generated.** One-file copy of `cardpricer/`. Do not edit. |
 | `collection_pricer.py` | **Legacy.** The older Magic-only "MTG Collection Buyer" pricer (Scryfall only). Superseded by `cardpricer/`. |
 | `MTGCollectionBuyer`, `MTGCollectionBuyer.app.zip` | **Legacy.** Prebuilt Mac (Apple Silicon) binaries of `collection_pricer.py`. |
