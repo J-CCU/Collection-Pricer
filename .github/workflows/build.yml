@@ -1,0 +1,44 @@
+# Builds CardPricer.exe (Windows) and CardPricer.app (macOS, Apple Silicon and
+# Intel) on GitHub's machines. Run it from the Actions tab ("Run workflow") or
+# by pushing a tag like v3.0.0; download the results under the run's Artifacts.
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: build_windows.bat
+        shell: cmd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CardPricer-windows
+          path: dist/CardPricer.exe
+
+  mac:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-14   # Apple Silicon
+            arch: arm64
+          - runner: macos-13   # Intel
+            arch: intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: chmod +x build_mac.sh && PYTHON=python ./build_mac.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CardPricer-mac-${{ matrix.arch }}
+          path: dist/CardPricer-mac.zip
