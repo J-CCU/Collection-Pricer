@@ -1,8 +1,19 @@
 # Collection Pricer
 
-A desktop app (Tkinter) that prices messy card lists for buying collections.
-It identifies each line, looks up a TCGplayer price, and works out a buy
-offer from your condition and buy-percentage tables.
+A desktop app (Tkinter) for stores and buyers pricing trading card
+collections. Give it a messy card list; it identifies each line, looks up a
+TCGplayer price, works out a buy offer from your condition and buy-percentage
+tables, and writes a color-coded Excel sheet and a CSV.
+
+## Quick start
+
+1. Open the prebuilt app (`CardPricer.exe` on Windows, `CardPricer.app` from
+   `CardPricer-mac.zip` on an Apple Silicon Mac) or run `run_pricer.py` from
+   source (see [Running](#running)).
+2. Click **1. Load Card Data**. The first time this downloads about 400 MB
+   from Scryfall and takes about 15 minutes for TCGplayer data.
+3. Click **2. Select List** and pick a `.csv`, `.tsv`, `.txt` or `.xlsx` list.
+4. Open `<list name>_PRICED_<date>_<time>.xlsx`, written next to your list.
 
 ## Supported games
 
@@ -20,7 +31,7 @@ several games or none, the **Default game** setting decides.
 
 ## Supported list formats
 
-Files: `.csv`, `.tsv`, `.txt`, `.xlsx`.
+Files: `.csv`, `.tsv`, `.txt`, `.xlsx` (only the first worksheet is read).
 
 Layouts the reader handles:
 
@@ -43,7 +54,9 @@ assumption** setting (default `LP/MP`, the average of LP and MP).
 ### Prebuilt app
 
 - Windows: `CardPricer.exe`
-- Mac: unzip `CardPricer-mac.zip` to get `CardPricer.app`
+- Mac: unzip `CardPricer-mac.zip` to get `CardPricer.app`. The included
+  build is for Apple Silicon; on an Intel Mac, build it yourself (see
+  [Building the .exe and .app](#building-the-exe-and-app)) or run from source.
 
 The apps are not signed. On Windows, at "Windows protected your PC" click
 **More info**, then **Run anyway**. On a Mac, right-click the app, choose
@@ -52,7 +65,9 @@ The apps are not signed. On Windows, at "Windows protected your PC" click
 
 ### From source
 
-Needs Python 3 with Tkinter, plus:
+Needs Python 3 with Tkinter (3.10 or newer from python.org is recommended;
+on a Mac, the Apple-supplied `/usr/bin/python3` has a Tk that is too old),
+plus:
 
 ```
 pip install requests openpyxl
@@ -74,7 +89,9 @@ script. It has the same requirements and is run the same way:
 py card_pricer.py
 ```
 
-It is generated from `cardpricer/`; do not edit it by hand.
+It is a copy of `cardpricer/` merged into one file; do not edit it by hand.
+The generator script (`make_single_file.py`) is not in this repository, so
+after changing the package, use `run_pricer.py` or regenerate it elsewhere.
 
 ### Using the app
 
@@ -176,10 +193,29 @@ updating the app keeps them:
 TCGCSV data is in its `tcgcsv` subfolder. The folder name is shared with the
 legacy MTGCollectionBuyer app.
 
+## Troubleshooting
+
+| Message / symptom | Fix |
+|---|---|
+| "Card data not loaded" | Click **1. Load Card Data** and wait for "Ready. Click 2. Select List." |
+| "Busy" | Wait for the current job to finish; progress is shown in the log. |
+| "price ranges overlap" | Make each range's Min at least the previous range's Max. Only the last range may have a blank Max. |
+| "every range needs a valid Min price, Buy %, and a Max above Min" | Fill in Min and Buy % with numbers, and a Max greater than Min (or blank), or remove the row. |
+| "WARNING: No buy percentage is defined below $..." in the log | The first range does not start at $0, so cheaper cards get no offer. |
+| "Stopped with an error; see the log." during loading | Usually a network problem reaching Scryfall or TCGCSV. Check the connection and click the button again; a TCGCSV download resumes where it stopped. |
+| Prices look a day old | Click **Update TCGplayer Prices**; TCGCSV itself only updates once a day. |
+| `ModuleNotFoundError: requests` or `openpyxl` | Run `pip install requests openpyxl` for the Python you start the app with. |
+| Many rows are MANUAL CHECK or UNKNOWN | Add set names or card numbers to the list, or a Game column for mixed lists. Check the Review Flag column for the reason. |
+
+To start over with fresh card data, close the app and delete the data folder
+(see [Cache location](#cache-location)); this also resets your pricing
+settings.
+
 ## Tests
 
 ```
-py tests/run_tests.py [section ...]
+py tests/run_tests.py [section ...]          # Windows
+python3 tests/run_tests.py [section ...]     # Mac / Linux
 ```
 
 Sections: `layouts`, `filegame`, `magic`, `pokemon`, `yugioh`, `onepiece`,
@@ -187,8 +223,9 @@ Sections: `layouts`, `filegame`, `magic`, `pokemon`, `yugioh`, `onepiece`,
 from **Load Card Data**; TCGCSV-backed sections skip games that have not been
 synced. Fixtures are in `tests/fixtures/`.
 
-`py samples/grade_samples.py` prices the lists in `samples/` and grades the
-results against a built-in answer key.
+`py samples/grade_samples.py` (or `python3 ...`) prices the lists in
+`samples/` and grades the results against a built-in answer key. Both need
+`requests` and `openpyxl` installed and card data already loaded once.
 
 ## Building the .exe and .app
 
@@ -235,6 +272,6 @@ run's Artifacts:
 | `CardPricer.spec`, `build_mac.sh`, `build_windows.bat` | Build scripts |
 | `.github/workflows/build.yml` | GitHub Actions build |
 | `CardPricer.exe`, `CardPricer-mac.zip` | Prebuilt current app |
-| `card_pricer.py` | **Generated.** One-file build of `cardpricer/` made by `make_single_file.py`. Do not edit; regenerate after changing the package. |
+| `card_pricer.py` | **Generated.** One-file copy of `cardpricer/`. Do not edit. |
 | `collection_pricer.py` | **Legacy.** The older Magic-only "MTG Collection Buyer" pricer (Scryfall only). Superseded by `cardpricer/`. |
-| `MTGCollectionBuyer`, `MTGCollectionBuyer.app.zip` | **Legacy.** Prebuilt binaries of `collection_pricer.py`. |
+| `MTGCollectionBuyer`, `MTGCollectionBuyer.app.zip` | **Legacy.** Prebuilt Mac (Apple Silicon) binaries of `collection_pricer.py`. |
