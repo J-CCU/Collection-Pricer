@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Collection Pricer - Magic, Pokemon, Yu-Gi-Oh!, One Piece, Riftbound.
 
-One-file build of the cardpricer package (made by make_single_file.py, which is
-not in this repo; edit the package, not this file). Run:
+The whole app in one file; make changes here. Run:
     Windows:  py card_pricer.py
     Mac:      python3 card_pricer.py
 Needs: pip install requests openpyxl

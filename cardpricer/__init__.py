@@ -1,1 +1,0 @@
-"""Multi-game collection pricer."""

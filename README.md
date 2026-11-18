@@ -9,9 +9,9 @@ tables, and writes a color-coded Excel sheet and a CSV.
 
 Prebuilt apps aren't included right now; build one from source (see
 [Building the .exe and .app](#building-the-exe-and-app)) or run
-`run_pricer.py` with Python.
+`card_pricer.py` with Python.
 
-1. Run `run_pricer.py` from source (see [Running](#running)), or open an
+1. Run `card_pricer.py` from source (see [Running](#running)), or open an
    app you built yourself (see
    [Building the .exe and .app](#building-the-exe-and-app)).
 2. Click **1. Load Card Data**. The first time this downloads about 400 MB
@@ -79,22 +79,11 @@ pip install requests openpyxl
 Then, from the repo folder:
 
 ```
-py run_pricer.py          # Windows
-python3 run_pricer.py     # Mac / Linux
+py card_pricer.py          # Windows
+python3 card_pricer.py     # Mac / Linux
 ```
 
-### One-file script
-
-`card_pricer.py` is the whole package in one file, for sharing a single
-script. It has the same requirements and is run the same way:
-
-```
-py card_pricer.py
-```
-
-It is a copy of `cardpricer/` merged into one file; do not edit it by hand.
-The generator script (`make_single_file.py`) is not in this repository, so
-after changing the package, use `run_pricer.py` or regenerate it elsewhere.
+`card_pricer.py` is the whole app in one file; make changes there.
 
 ### Using the app
 
@@ -119,7 +108,7 @@ it stopped.
 Settings are edited in the **Pricing assumptions** panel and saved to
 `pricer_settings.json` in the data folder (see below). **Reset Defaults**
 restores the values below. The defaults are defined in
-`cardpricer/pricing.py`.
+the `cardpricer/pricing.py` section of `card_pricer.py`.
 
 **Step 1 - Condition value.** NM price x condition % = condition value.
 
@@ -196,8 +185,8 @@ updating the app keeps them:
 | macOS | `~/Library/Application Support/MTGCollectionBuyer` |
 | Linux | `$XDG_DATA_HOME/MTGCollectionBuyer` (default `~/.local/share/MTGCollectionBuyer`) |
 
-TCGCSV data is in its `tcgcsv` subfolder. The folder name is shared with the
-legacy MTGCollectionBuyer app.
+TCGCSV data is in its `tcgcsv` subfolder. The folder name comes from the older
+MTGCollectionBuyer app this one replaced.
 
 ## Troubleshooting
 
@@ -217,66 +206,38 @@ To start over with fresh card data, close the app and delete the data folder
 (see [Cache location](#cache-location)); this also resets your pricing
 settings.
 
-## Tests
-
-```
-py tests/run_tests.py [section ...]          # Windows
-python3 tests/run_tests.py [section ...]     # Mac / Linux
-```
-
-Sections: `layouts`, `filegame`, `magic`, `pokemon`, `yugioh`, `onepiece`,
-`riftbound`, `sealed`, `mixed` (default: all). The tests use the cached data
-from **Load Card Data**; TCGCSV-backed sections skip games that have not been
-synced. Fixtures are in `tests/fixtures/`.
-
-`py samples/grade_samples.py` (or `python3 ...`) prices the lists in
-`samples/` and grades the results against a built-in answer key. Both need
-`requests` and `openpyxl` installed and card data already loaded once.
-
 ## Building the .exe and .app
 
-Both builds use PyInstaller with `CardPricer.spec`. PyInstaller cannot
-cross-build, so each must be built on its own system.
+PyInstaller cannot cross-build: build the `.exe` on Windows and the `.app` on
+a Mac, each with Python 3.10+ from python.org. Card data and settings are never
+put inside the app (they stay in the data folder above), so rebuilding keeps
+them. In a terminal, in the folder with `card_pricer.py`:
 
-| Platform | Command | Output |
-|---|---|---|
-| Windows | `build_windows.bat` | `dist\CardPricer.exe` (one file, no console) |
-| Mac | `./build_mac.sh` (needs Python 3.10+ from python.org) | `dist/CardPricer.app` and `dist/CardPricer-mac.zip` |
+Windows:
 
-`build_mac.sh` builds for the Mac's own chip (Apple Silicon or Intel) in a
-`.venv-build` virtual environment. Set `PYTHON` to use a different
-interpreter.
+```
+py -m venv build-env
+build-env\Scripts\python -m pip install pyinstaller requests openpyxl
+build-env\Scripts\python -m PyInstaller --noconfirm --onefile --windowed --name CardPricer --hidden-import openpyxl card_pricer.py
+```
 
-### GitHub Actions
+Mac:
 
-`.github/workflows/build.yml` builds on GitHub's machines with Python 3.12.
-It runs when started from **Actions > build > Run workflow**, or when a tag
-matching `v*` (for example `v3.0.0`) is pushed. Download the results from the
-run's Artifacts:
+```
+python3 -m venv build-env
+build-env/bin/python -m pip install pyinstaller requests openpyxl
+build-env/bin/python -m PyInstaller --noconfirm --windowed --name CardPricer --hidden-import openpyxl card_pricer.py
+ditto -c -k --keepParent dist/CardPricer.app dist/CardPricer-mac.zip
+```
 
-- `CardPricer-windows` (`CardPricer.exe`)
-- `CardPricer-mac-arm64` (Apple Silicon `CardPricer-mac.zip`)
-- `CardPricer-mac-intel` (Intel `CardPricer-mac.zip`)
+The result is `dist\CardPricer.exe` or `dist/CardPricer.app` (plus a `.zip`
+to send to another Mac). A Mac app only runs on Macs with the same chip type
+(Apple Silicon or Intel). Afterwards you can delete `build-env`, `build` and
+`CardPricer.spec`.
 
 ## Repository files
 
 | Path | What it is |
 |---|---|
-| `cardpricer/` | The application package. **Source of truth**; make changes here. |
-| `cardpricer/app.py` | Window and settings screen |
-| `cardpricer/engine.py` | Per-row matching, pricing and status |
-| `cardpricer/listread.py` | Reads and interprets list files |
-| `cardpricer/pricing.py` | Pricing rules and default tables |
-| `cardpricer/conditions.py` | Condition vocabulary |
-| `cardpricer/report.py` | CSV and Excel output |
-| `cardpricer/paths.py` | Data folder location |
-| `cardpricer/games/` | Magic (Scryfall), other games (TCGplayer) and sealed matchers |
-| `cardpricer/sources/tcgcsv.py` | TCGCSV download and cache |
-| `run_pricer.py` | Starts the app; PyInstaller entry point |
-| `tests/` | Regression tests and fixture lists |
-| `samples/` | Sample lists, their priced output, and `grade_samples.py` |
-| `CardPricer.spec`, `build_mac.sh`, `build_windows.bat` | Build scripts |
-| `.github/workflows/build.yml` | GitHub Actions build |
-| `card_pricer.py` | **Generated.** One-file copy of `cardpricer/`. Do not edit. |
-| `collection_pricer.py` | **Legacy.** The older Magic-only "MTG Collection Buyer" pricer (Scryfall only). Superseded by `cardpricer/`. |
-| `MTGCollectionBuyer`, `MTGCollectionBuyer.app.zip` | **Legacy.** Prebuilt Mac (Apple Silicon) binaries of `collection_pricer.py`. |
+| `card_pricer.py` | The whole app: window, list reading, matching, pricing, reports. |
+| `README.md` | This document. |
