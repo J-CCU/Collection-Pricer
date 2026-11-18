@@ -4057,12 +4057,133 @@ class TierTable:
         return clean
 
 
+class FlowFrame(ttk.Frame):
+    """Lays its items out left to right and wraps to a new line when the
+    window is too narrow, so nothing is ever cut off at the right edge.
+
+    wrap=True items are text labels whose wrap width follows the frame's width.
+    joiner=True items (the arrow between steps) only show when they sit between
+    two items on the same line.
+    """
+
+    def __init__(self, parent, padx=12, pady=8, **kw):
+        super().__init__(parent, **kw)
+        self.padx, self.pady = padx, pady
+        self.items = []
+        self._pending = False
+        self.bind("<Configure>", self._schedule, add="+")
+
+    def add(self, widget, wrap=False, joiner=False):
+        self.items.append((widget, wrap, joiner))
+        widget.bind("<Configure>", self._schedule, add="+")
+        self._schedule()
+        return widget
+
+    def _schedule(self, _event=None):
+        if not self._pending:
+            self._pending = True
+            self.after_idle(self._layout)
+
+    def _layout(self):
+        self._pending = False
+        width = self.winfo_width()
+        if width <= 1:
+            width = max(1, self.winfo_reqwidth())
+        for widget, wrap, _joiner in self.items:
+            if wrap and int(widget.cget("wraplength") or 0) != max(150, width):
+                widget.configure(wraplength=max(150, width))
+        rows, row, x = [], [], 0
+        n = len(self.items)
+        for i, (widget, wrap, joiner) in enumerate(self.items):
+            w = widget.winfo_reqwidth()
+            if joiner:
+                nxt = self.items[i + 1][0] if i + 1 < n else None
+                need = w + self.padx + (nxt.winfo_reqwidth() if nxt else 0)
+                if x == 0 or nxt is None or x + need > width:
+                    widget.place_forget()
+                    continue
+            if row and x + w > width:
+                rows.append(row)
+                row, x = [], 0
+            row.append((widget, x, wrap or joiner))
+            x += w + self.padx
+        if row:
+            rows.append(row)
+        y = 0
+        for row in rows:
+            row_h = max(w.winfo_reqheight() for w, _x, _c in row)
+            for widget, wx, centre in row:
+                # Text and the arrow sit centred beside taller controls; boxes align at the top.
+                off = (row_h - widget.winfo_reqheight()) // 2 if centre else 0
+                widget.place(x=wx, y=y + off)
+            y += row_h + self.pady
+        height = max(0, y - self.pady)
+        if int(self.cget("height") or 0) != height:
+            self.configure(height=height)
+            self.event_generate("<<FlowChanged>>")
+
+
+class ScrollArea(ttk.Frame):
+    """A frame that fills the window and shows a vertical scrollbar only when
+    the window is too short for its contents."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        bg = ttk.Style().lookup("TFrame", "background") or None
+        self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0, background=bg)
+        self.vsb = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.vsb.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.inner = ttk.Frame(self.canvas)
+        self._win = self.canvas.create_window(0, 0, window=self.inner, anchor="nw")
+        self._scrolling = False
+        self.canvas.bind("<Configure>", self._fit)
+        self.inner.bind("<Configure>", self._fit)
+        self.bind_all("<<FlowChanged>>", lambda e: self.after_idle(self._fit), add="+")
+        self.bind_all("<MouseWheel>", self._wheel, add="+")
+        self.bind_all("<Button-4>", lambda e: self._scroll(-1, e), add="+")
+        self.bind_all("<Button-5>", lambda e: self._scroll(1, e), add="+")
+
+    def _fit(self, _event=None):
+        cw, ch = self.canvas.winfo_width(), self.canvas.winfo_height()
+        if cw <= 1:
+            return
+        need = self.inner.winfo_reqheight()
+        self.canvas.itemconfigure(self._win, width=cw, height=max(ch, need))
+        self.canvas.configure(scrollregion=(0, 0, cw, max(ch, need)))
+        scroll = need > ch
+        if scroll != self._scrolling:
+            self._scrolling = scroll
+            if scroll:
+                self.vsb.pack(side="right", fill="y", before=self.canvas)
+            else:
+                self.vsb.pack_forget()
+                self.canvas.yview_moveto(0)
+
+    def _scroll(self, units, event):
+        if not self._scrolling or isinstance(event.widget, tk.Text):
+            return
+        try:
+            if not str(event.widget).startswith(str(self)):
+                return
+        except Exception:
+            return
+        self.canvas.yview_scroll(units, "units")
+
+    def _wheel(self, event):
+        d = event.delta
+        units = -d if abs(d) < 120 else -int(d / 120)
+        if units:
+            self._scroll(units, event)
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Collection Pricer — Magic, Pokémon, Yu-Gi-Oh!, One Piece, Riftbound")
-        self.geometry("1320x900")
-        self.minsize(1000, 650)
+        # Fit the screen; the layout wraps and scrolls for any size above minsize.
+        self.geometry(f"{min(1320, self.winfo_screenwidth() - 40)}x{min(900, self.winfo_screenheight() - 100)}")
+        self.minsize(680, 400)
         self.resizable(True, True)
         self.db = None
         self.tcgcsv = None
@@ -4074,7 +4195,9 @@ class App(tk.Tk):
 
     # ------------------------------------------------------------------ UI
     def make_ui(self):
-        frame = ttk.Frame(self, padding=14)
+        area = ScrollArea(self)
+        area.pack(fill="both", expand=True)
+        frame = ttk.Frame(area.inner, padding=14)
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text="Collection Pricer", font=("TkDefaultFont", 18, "bold")).pack(anchor="w")
 
@@ -4082,26 +4205,31 @@ class App(tk.Tk):
         opts.pack(fill="x")
         settings = self.load_settings()
 
-        top = ttk.Frame(opts)
-        top.grid(row=0, column=0, sticky="w")
-        ttk.Label(top, text="Condition assumption:").pack(side="left")
+        top = FlowFrame(opts, padx=8, pady=2)
+        top.pack(fill="x")
+        cond_box = ttk.Frame(top)
+        ttk.Label(cond_box, text="Condition assumption:").pack(side="left")
         self.condition = tk.StringVar(value=settings.get("condition") or "LP/MP")
-        ttk.Combobox(top, textvariable=self.condition, values=["LP/MP", "NM", "LP", "MP", "HP", "DMG"],
-                     state="readonly", width=8).pack(side="left", padx=(8, 4))
-        ttk.Label(top, text="for rows with no condition (LP/MP averages LP and MP).").pack(side="left", padx=(0, 24))
-        ttk.Label(top, text="Default game:").pack(side="left")
+        ttk.Combobox(cond_box, textvariable=self.condition, values=["LP/MP", "NM", "LP", "MP", "HP", "DMG"],
+                     state="readonly", width=8).pack(side="left", padx=(8, 0))
+        top.add(cond_box)
+        top.add(ttk.Label(top, text="for rows with no condition (LP/MP averages LP and MP)."), wrap=True)
+        top = FlowFrame(opts, padx=8, pady=2)
+        top.pack(fill="x", pady=(6, 0))
+        game_box = ttk.Frame(top)
+        ttk.Label(game_box, text="Default game:").pack(side="left")
         labels = [label for _k, label in GAME_CHOICES]
         saved_game = dict(GAME_CHOICES).get(settings.get("default_game", "magic"), labels[0])
         self.default_game = tk.StringVar(value=saved_game)
-        ttk.Combobox(top, textvariable=self.default_game, values=labels, state="readonly", width=20).pack(
-            side="left", padx=(8, 4))
-        ttk.Label(top, text="used when a name exists in several games or none.").pack(side="left")
+        ttk.Combobox(game_box, textvariable=self.default_game, values=labels, state="readonly", width=20).pack(
+            side="left", padx=(8, 0))
+        top.add(game_box)
+        top.add(ttk.Label(top, text="used when a name exists in several games or none."), wrap=True)
 
-        steps = ttk.Frame(opts)
-        steps.grid(row=1, column=0, sticky="w", pady=(10, 0))
+        steps = FlowFrame(opts, padx=12, pady=10)
+        steps.pack(fill="x", pady=(10, 0))
 
         step1 = ttk.LabelFrame(steps, text="Step 1 - Condition value (% of NM price)", padding=8)
-        step1.grid(row=0, column=0, sticky="nw")
         for col, cond in enumerate(CONDITION_ORDER, start=1):
             ttk.Label(step1, text=cond).grid(row=0, column=col, sticky="w", padx=(0, 8))
         saved_special = settings.get("special_rules") or {}
@@ -4116,44 +4244,44 @@ class App(tk.Tk):
                 self.special_vars[key][cond] = var
         ttk.Label(step1, text="Alpha/Beta/Unlimited and foil Magic cards use\ntheir row or All cards, whichever is lower.").grid(
             row=len(SPECIAL_RULE_LABELS) + 1, column=0, columnspan=len(CONDITION_ORDER) + 1, sticky="w", pady=(4, 0))
+        steps.add(step1)
 
-        ttk.Label(steps, text="→", font=("TkDefaultFont", 18)).grid(row=0, column=1, padx=10)
+        steps.add(ttk.Label(steps, text="→", font=("TkDefaultFont", 18)), joiner=True)
 
         step2 = ttk.LabelFrame(steps, text="Step 2 - Buy % (by condition value)", padding=8)
-        step2.grid(row=0, column=2, sticky="nw")
         self.card_tiers = TierTable(step2, settings.get("tiers") or DEFAULT_BUY_TIERS)
         self.card_tiers.frame.pack(anchor="w")
         ttk.Button(step2, text="+ Add Price Range", command=lambda: self.card_tiers.add()).pack(anchor="w", pady=(6, 0))
+        steps.add(step2)
 
         step3 = ttk.LabelFrame(steps, text="Sealed product - Buy % (no condition step)", padding=8)
-        step3.grid(row=0, column=3, sticky="nw", padx=(24, 0))
         self.sealed_tiers = TierTable(step3, settings.get("sealed_tiers") or DEFAULT_SEALED_TIERS)
         self.sealed_tiers.frame.pack(anchor="w")
         ttk.Button(step3, text="+ Add Price Range", command=lambda: self.sealed_tiers.add()).pack(anchor="w", pady=(6, 0))
+        steps.add(step3)
 
-        reset_row = ttk.Frame(opts)
-        reset_row.grid(row=3, column=0, sticky="w", pady=(8, 0))
-        ttk.Button(reset_row, text="Reset Defaults", command=self.reset_defaults).pack(side="left")
-        ttk.Label(reset_row, text="Example: $100 NM card in MP -> 70% = $70 condition value -> $70's Buy % applies. "
-                                  "Leave Max blank for no upper limit. Settings are remembered between runs.").pack(
-            side="left", padx=8)
+        reset_row = FlowFrame(opts, padx=8, pady=4)
+        reset_row.pack(fill="x", pady=(8, 0))
+        reset_row.add(ttk.Button(reset_row, text="Reset Defaults", command=self.reset_defaults))
+        reset_row.add(ttk.Label(reset_row, text="Example: $100 NM card in MP -> 70% = $70 condition value -> "
+                                                "$70's Buy % applies. Leave Max blank for no upper limit. "
+                                                "Settings are remembered between runs."), wrap=True)
 
-        buttons = ttk.Frame(frame)
+        buttons = FlowFrame(frame, padx=10, pady=6)
         buttons.pack(fill="x", pady=12)
-        self.load_btn = ttk.Button(buttons, text="1. Load Card Data", command=self.load_data)
-        self.load_btn.pack(side="left")
-        self.file_btn = ttk.Button(buttons, text="2. Select List", command=self.select_file, state="disabled")
-        self.file_btn.pack(side="left", padx=10)
-        self.sync_btn = ttk.Button(buttons, text="Update TCGplayer Prices", command=self.update_prices)
-        self.sync_btn.pack(side="left", padx=(30, 0))
-        ttk.Label(buttons, text="TCGCSV refreshes once a day; a full update takes about 15 minutes.").pack(
-            side="left", padx=8)
+        self.load_btn = buttons.add(ttk.Button(buttons, text="1. Load Card Data", command=self.load_data))
+        self.file_btn = buttons.add(ttk.Button(buttons, text="2. Select List", command=self.select_file,
+                                               state="disabled"))
+        self.sync_btn = buttons.add(ttk.Button(buttons, text="Update TCGplayer Prices", command=self.update_prices))
+        buttons.add(ttk.Label(buttons, text="TCGCSV refreshes once a day; a full update takes about 15 minutes."),
+                    wrap=True)
 
-        self.progress_bar = ttk.Progressbar(frame, orient="horizontal", length=960, mode="determinate")
-        self.progress_bar.pack(pady=(0, 10))
+        self.progress_bar = ttk.Progressbar(frame, orient="horizontal", mode="determinate")
+        self.progress_bar.pack(fill="x", pady=(0, 10))
         self.status = ttk.Label(frame, text="Waiting. Click 1. Load Card Data to start.")
-        self.status.pack(anchor="w")
-        self.log_box = tk.Text(frame, height=30, width=120, state="disabled")
+        self.status.pack(anchor="w", fill="x")
+        frame.bind("<Configure>", lambda e: self.status.configure(wraplength=max(150, e.width - 30)), add="+")
+        self.log_box = tk.Text(frame, height=8, width=40, state="disabled")
         self.log_box.pack(fill="both", expand=True, pady=(8, 0))
 
     # ------------------------------------------------------------ settings
