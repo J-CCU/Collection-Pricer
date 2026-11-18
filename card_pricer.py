@@ -34,6 +34,25 @@ def norm(s):
     s = "".join(ch for ch in s if not unicodedata.combining(ch))
     return re.sub(r"\s+", " ", s.strip().lower())
 
+def edit_distance(a, b, limit=None):
+    """Letters to add, remove or change to turn a into b. With limit, stops
+    early and returns limit + 1 once the distance is certainly larger."""
+    if a == b:
+        return 0
+    # Swapping two neighbouring letters ("alpah") also counts as one change.
+    before, prev = None, list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            d = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb))
+            if before is not None and j > 1 and ca == b[j - 2] and a[i - 2] == cb:
+                d = min(d, before[j - 2] + 1)
+            cur.append(d)
+        if limit is not None and min(cur) > limit:
+            return limit + 1
+        before, prev = prev, cur
+    return prev[-1]
+
 def compact(s):
     return re.sub(r"[^a-z0-9]", "", norm(s))
 
@@ -1172,6 +1191,7 @@ class ScryfallDB:
         self._set_vocab = {}
         self._set_lookup = {}
         self._metadata_lookup = {}
+        self._fuzzy_sets = None  # typo table for set names, rebuilt on first use
         self._known_set_codes = set()
 
     def _build_runtime_indexes(self):
@@ -1191,6 +1211,7 @@ class ScryfallDB:
         self._set_vocab = {}
         self._set_lookup = {}
         self._metadata_lookup = {}
+        self._fuzzy_sets = None  # typo table for set names, rebuilt on first use
         self._known_set_codes = set()
 
         for c in self.cards:
@@ -1423,6 +1444,61 @@ class ScryfallDB:
         self.metadata_terms = {x for x in terms if len(_clue_tokens(x)) <= 4}
         self.set_terms = set_terms
 
+    def _misspelled_set_tail(self, words, raw):
+        """(typed phrase, set name) when the last 1-3 words are a set name with a
+        small typo, else None. Careful on purpose: the phrase must be 5+ letters,
+        at most 1 letter off (2 for 8+ letters), point at exactly one set, leave
+        at least one word for the card name, and not be words that sit together
+        in a card name (one word: any card-name word)."""
+        self._fuzzy_tables()
+        if self.names.get(norm(raw)):
+            return None
+        for length in (3, 2, 1):
+            if len(words) - length < 1:
+                continue
+            phrase = " ".join(words[-length:])
+            set_name = self._misspelled_set(phrase)
+            if set_name:
+                return phrase, set_name
+        return None
+
+    def _fuzzy_tables(self):
+        """Build (once per card list) the set-name typo table and card-name words."""
+        if getattr(self, "_fuzzy_sets", None) is None:
+            fuzzy = {}
+            for sn in set(self._set_vocab.values()):
+                key = compact(sn)
+                if key.isalpha() and len(key) >= 5:
+                    fuzzy.setdefault(key, sn)
+            for alias, targets in SET_ALIASES.items():
+                key, target = compact(alias), norm(targets[0])
+                if key.isalpha() and len(key) >= 5 and target in self._set_vocab:
+                    fuzzy.setdefault(key, target)
+            for short in ("alpha", "beta"):
+                if short in self._set_lookup:
+                    fuzzy.setdefault(short, self._set_lookup[short])
+            self._fuzzy_sets = fuzzy
+            self._card_words, self._card_word_runs = set(), set()
+            for name in self.unique_names:
+                ws = norm(name).split()
+                self._card_words.update(ws)
+                for n in (2, 3):
+                    self._card_word_runs.update(" ".join(ws[i:i + n]) for i in range(len(ws) - n + 1))
+
+    def _misspelled_set(self, phrase):
+        """The one set name this 1-3 word phrase is a small typo of, else None."""
+        self._fuzzy_tables()
+        pn = norm(phrase)
+        key = compact(pn)
+        if not key.isalpha() or len(key) < 5 or len(pn.split()) > 3:
+            return None
+        if (pn in self._card_words) if len(pn.split()) == 1 else (pn in self._card_word_runs):
+            return None
+        limit = 1 if len(key) < 8 else 2
+        hits = {sn for cand, sn in self._fuzzy_sets.items()
+                if abs(len(cand) - len(key)) <= limit and edit_distance(key, cand, limit) <= limit}
+        return hits.pop() if len(hits) == 1 else None
+
     def enrich_parsed_with_metadata(self, parsed):
         """Discover set/treatment clues using bounded lookups, not full scans.
 
@@ -1456,6 +1532,7 @@ class ScryfallDB:
         # ordinary set names ("Aetherdrift"), multi-word names, and set codes
         # such as "DFT" without scanning the entire Scryfall set vocabulary.
         src_words = re.findall(r"[A-Za-z0-9'’.-]+", source)
+        set_phrases = []
         max_set_words = 6
         # Longest phrase first, so "ice age" wins over the set code "ice".
         i = 0
@@ -1476,10 +1553,27 @@ class ScryfallDB:
                 if canonical not in set_found_norm:
                     set_found.append(canonical)
                     set_found_norm.add(norm(canonical))
+                    set_phrases.append(phrase)
                     source = re.sub(r"(?<![\w'])" + re.escape(phrase) + r"(?![\w'])", " ", source, count=1, flags=re.I)
                 step = j - i
                 break
             i += step
+
+        # A misspelled set name at the end ("sol rng unlmited") is read as that
+        # set, so the price isn't taken from a cheap reprint. Flagged for review.
+        # Only when no set was named correctly. A set name that is also part of
+        # card names ("the Apocalypse") doesn't count: it may belong to the name.
+        self._fuzzy_tables()
+        named = [ph for ph in set_phrases if norm(ph) not in self._card_words and norm(ph) not in self._card_word_runs]
+        left = re.findall(r"[A-Za-z0-9'’.-]+", source)
+        if not named and not parsed.get("set_cues") and len(left) >= 2:
+            guess = self._misspelled_set_tail(left, parsed.get("raw", ""))
+            if guess:
+                phrase, canonical = guess
+                set_found.append(canonical)
+                set_found_norm.add(norm(canonical))
+                source = re.sub(r"(?<![\w'])" + re.escape(phrase) + r"(?![\w'])", " ", source, count=1, flags=re.I)
+                parsed["set_spelling"] = (phrase, canonical)
 
         # Parenthetical annotations are especially useful for set names.
         alias_to_canonical = {}
@@ -1583,7 +1677,8 @@ class ScryfallDB:
                     i = j
                     break
             else:
-                return False
+                # the rest may be a misspelled set name ("dominara united")
+                return len(words) - i <= 3 and bool(self._misspelled_set(" ".join(words[i:])))
         return True
 
     def _embedded_exact_name(self, raw):
@@ -3376,6 +3471,10 @@ def make_row(game, raw, qty, parsed, ident, review, condition, buy_tiers, condit
              special_rules=None, sealed_tiers=None):
     """Build one output row. ident describes the matched card/product (or is
     None) and carries its market price."""
+    if parsed.get("set_spelling") and ident and ident.get("name"):
+        typed, set_name = parsed["set_spelling"]
+        note = f"SET SPELLING: read '{typed}' as {set_name.title()}"
+        review = f"{review}; {note}" if review else note
     manual = manual_check_tags(parsed)
     if manual:
         review = f"{MANUAL_CHECK_PREFIX}: {', '.join(manual)}" + (("; " + review) if review else "")
