@@ -7,12 +7,15 @@ tables, and writes a color-coded Excel sheet and a CSV.
 
 ## Quick start
 
-Prebuilt apps aren't included right now; build one from source (see
+A prebuilt Mac app is included: `CardPricer-mac.zip` (Apple Silicon Macs only;
+built 2026-11-18). No Windows `.exe` is included yet; build one from source (see
 [Building the .exe and .app](#building-the-exe-and-app)) or run
 `card_pricer.py` with Python.
 
-1. Run `card_pricer.py` from source (see [Running](#running)), or open an
-   app you built yourself (see
+1. On an Apple Silicon Mac, download `CardPricer-mac.zip`, double-click it, and
+   open `CardPricer.app`. The first time, right-click it > Open > Open (it is
+   not signed by Apple). Otherwise run `card_pricer.py` from source (see
+   [Running](#running)) or build an app (see
    [Building the .exe and .app](#building-the-exe-and-app)).
 2. Click **1. Load Card Data**. The first time this downloads about 400 MB
    from Scryfall and takes about 15 minutes for TCGplayer data.
@@ -240,4 +243,5 @@ to send to another Mac). A Mac app only runs on Macs with the same chip type
 | Path | What it is |
 |---|---|
 | `card_pricer.py` | The whole app: window, list reading, matching, pricing, reports. |
+| `CardPricer-mac.zip` | Prebuilt Mac app (Apple Silicon), built from `card_pricer.py` on 2026-11-18. Rebuild it after changing the script. |
 | `README.md` | This document. |
